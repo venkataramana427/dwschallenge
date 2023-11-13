@@ -22,9 +22,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class AccountsService {
-  private Lock lock = new ReentrantLock();//ReentrantLock class implements the Lock interface. It offers the same concurrency and memory semantics.We need to make sure that we are wrapping the lock() and the unlock() calls in the try-finally block to avoid the deadlock situations
-   Condition condition=lock.newCondition();
-
     @Getter
   private final AccountsRepository accountsRepository;
   @Autowired
@@ -41,9 +38,7 @@ public class AccountsService {
   public Account getAccount(String accountId) {
     return this.accountsRepository.getAccount(accountId);
   }
-  List<String> accountFromList =new ArrayList<String>();
-  List<String> accountToList =new ArrayList<String>();
-
+ 
   @Transactional
   public void transferBalance(TransferRequest transfer) throws OverDraftException, AccountNotExistException, InterruptedException {
     Account accountFrom = accountsRepository.getAccountByAccountId(transfer.getAccountFromId())
@@ -56,25 +51,20 @@ public class AccountsService {
      if (accountFrom.getBalance().compareTo(transfer.getAmount()) < 0) {
        throw new OverDraftException("Account with id:" + accountFrom.getAccountId() + " does not have enough balance to transfer.", ErrorMsgCode.ACCOUNT_ERROR);
      }
-     lock.lock();
-     if(!checkAccountId(accountFrom,accountTo) ){    //Check accountId in fromList and toList for A->B,C->D amount transfer 
-         condition.await();
-      }
-      accountFromList.add(accountFrom.getAccountId());
-      accountToList.add(accountTo.getAccountId());
+      accountFrom.getLock().lock(); //lock accountFrom and accountTo  be prevent the other thread from accessing account resource
+      accountTo.getLock().lock();
+
       checkTransaction(accountFrom,accountTo,transfer);  //Transfer Amount two different accounts
 
       try {
-          Thread.sleep(10000);
+          Thread.sleep(1000);
       }
       catch (InterruptedException e) {
           e.printStackTrace();
       }
-      accountFromList.remove(accountFrom.getAccountId());
-      accountToList.remove(accountTo.getAccountId());
-      condition.signal();
 
-      lock.unlock();
+      accountFrom.getLock().unlock();
+      accountTo.getLock().unlock();
 
 
   }
@@ -91,15 +81,7 @@ public class AccountsService {
 
     }
 
-    //Check the accountIds in fromList and toList for locking
-    public boolean checkAccountId(Account accountFrom,Account accountTo){
-            if(accountFromList.contains(accountFrom.getAccountId())
-                    || accountToList.contains(accountTo.getAccountId()))
-            {
-                return false;
-            }
-             return true;
-    }
+
 
     public void checkTransaction(Account accountFrom,Account accountTo,TransferRequest transfer){
         // withdraw amount.
