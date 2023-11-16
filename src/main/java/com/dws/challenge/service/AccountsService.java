@@ -38,7 +38,7 @@ public class AccountsService {
   public Account getAccount(String accountId) {
     return this.accountsRepository.getAccount(accountId);
   }
- 
+
   @Transactional
   public void transferBalance(TransferRequest transfer) throws OverDraftException, AccountNotExistException, InterruptedException {
     Account accountFrom = accountsRepository.getAccountByAccountId(transfer.getAccountFromId())
@@ -47,24 +47,19 @@ public class AccountsService {
     Account accountTo = accountsRepository.getAccountByAccountId(transfer.getAccountToId())
             .orElseThrow(() -> new AccountNotExistException("Account with id:" + transfer.getAccountFromId() + " does not exist.", ErrorMsgCode.ACCOUNT_ERROR));
 
+      accountFrom.getLock().lock(); //lock accountFrom and accountTo  be prevent the other thread from accessing account resource
+      accountTo.getLock().lock();
+
      //Check Balance
      if (accountFrom.getBalance().compareTo(transfer.getAmount()) < 0) {
        throw new OverDraftException("Account with id:" + accountFrom.getAccountId() + " does not have enough balance to transfer.", ErrorMsgCode.ACCOUNT_ERROR);
      }
-      accountFrom.getLock().lock(); //lock accountFrom and accountTo  be prevent the other thread from accessing account resource
-      accountTo.getLock().lock();
 
       checkTransaction(accountFrom,accountTo,transfer);  //Transfer Amount two different accounts
 
-      try {
-          Thread.sleep(1000);
-      }
-      catch (InterruptedException e) {
-          e.printStackTrace();
-      }
-
+      accountTo.getLock().unlock();     //lock release in opposite order.
       accountFrom.getLock().unlock();
-      accountTo.getLock().unlock();
+
 
 
   }
